@@ -12,7 +12,9 @@ import logging
 import time
 from typing import Optional
 import torch
+import torch.nn as nn
 from torch.serialization import safe_globals
+import os
 
 # Configuração de logging mais detalhada
 logging.basicConfig(
@@ -24,7 +26,18 @@ logger = logging.getLogger(__name__)
 # Configurar globals seguros para o PyTorch
 try:
     from ultralytics.nn.tasks import DetectionModel
-    torch.serialization.add_safe_globals([DetectionModel])
+    from torch.nn.modules.container import Sequential
+    safe_classes = [
+        DetectionModel,
+        Sequential,
+        nn.Conv2d,
+        nn.BatchNorm2d,
+        nn.ReLU,
+        nn.Module,
+        nn.ModuleList
+    ]
+    for cls in safe_classes:
+        torch.serialization.add_safe_globals([cls])
     logger.info("Configuração de segurança do PyTorch realizada com sucesso")
 except Exception as e:
     logger.warning(f"Aviso ao configurar segurança do PyTorch: {e}")
@@ -49,20 +62,51 @@ last_frame_time: dict[str, float] = {}
 frames_processed: dict[str, int] = {}
 model: Optional[YOLO] = None
 
-# Carregando o modelo YOLO
-try:
-    # Tentar carregar com a nova configuração de segurança
-    model = YOLO('weights/best.pt')
-    logger.info("Modelo YOLO carregado com sucesso!")
-except Exception as first_error:
-    logger.error(f"Primeira tentativa de carregar modelo falhou: {first_error}")
+# Função para carregar o modelo com diferentes tentativas
+def load_yolo_model():
+    model_path = 'weights/best.pt'
+    
+    if not os.path.exists(model_path):
+        logger.error(f"Arquivo do modelo não encontrado em {model_path}")
+        return None
+        
     try:
-        # Tentar carregar com weights_only=False
-        model = YOLO('weights/best.pt', weights_only=False)
-        logger.info("Modelo YOLO carregado com sucesso (usando weights_only=False)!")
-    except Exception as second_error:
-        logger.error(f"Erro ao carregar o modelo YOLO: {second_error}")
-        model = None
+        # Primeira tentativa: carregar normalmente
+        logger.info("Tentativa 1: Carregando modelo normalmente")
+        return YOLO(model_path)
+    except Exception as e1:
+        logger.error(f"Tentativa 1 falhou: {e1}")
+        
+        try:
+            # Segunda tentativa: usando torch.load diretamente
+            logger.info("Tentativa 2: Carregando com torch.load")
+            checkpoint = torch.load(model_path, map_location='cpu')
+            model = YOLO(model_path)
+            model.model.load_state_dict(checkpoint['model'].state_dict())
+            return model
+        except Exception as e2:
+            logger.error(f"Tentativa 2 falhou: {e2}")
+            
+            try:
+                # Terceira tentativa: usando weights_only=False
+                logger.info("Tentativa 3: Carregando com torch.load e weights_only=False")
+                checkpoint = torch.load(model_path, map_location='cpu', weights_only=False)
+                model = YOLO(model_path)
+                if hasattr(checkpoint, 'state_dict'):
+                    model.model.load_state_dict(checkpoint.state_dict())
+                elif isinstance(checkpoint, dict) and 'model' in checkpoint:
+                    model.model.load_state_dict(checkpoint['model'])
+                return model
+            except Exception as e3:
+                logger.error(f"Tentativa 3 falhou: {e3}")
+                return None
+
+# Carregando o modelo YOLO
+model = load_yolo_model()
+if model is not None:
+    logger.info("Modelo YOLO carregado com sucesso!")
+else:
+    logger.error("Todas as tentativas de carregar o modelo falharam")
 
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):

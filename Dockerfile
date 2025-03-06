@@ -10,6 +10,11 @@ RUN apt-get update && apt-get install -y \
 
 # Copia os arquivos de requisitos primeiro para aproveitar o cache do Docker
 COPY requirements.txt .
+
+# Instala torch primeiro
+RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
+
+# Instala outras dependências
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copia o resto dos arquivos
