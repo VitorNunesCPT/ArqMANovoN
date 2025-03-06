@@ -10,29 +10,37 @@ document.addEventListener("DOMContentLoaded", () => {
   let isProcessing = false;
   let isWaitingResponse = false;
 
-  // Conectar ao servidor Socket.IO
-  const socket = io();
+  // Verificar suporte à câmera
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    statusDiv.textContent =
+      "Seu navegador não suporta acesso à câmera. Por favor, use um navegador mais recente como Chrome ou Firefox.";
+    startButton.disabled = true;
+    return;
+  }
+
+  // Conectar ao servidor Socket.IO com reconexão automática
+  const socket = io({
+    reconnection: true,
+    reconnectionAttempts: 5,
+    reconnectionDelay: 1000,
+  });
 
   socket.on("connect", () => {
     statusDiv.textContent = "Conectado ao servidor";
+    startButton.disabled = false;
   });
 
   socket.on("disconnect", () => {
-    statusDiv.textContent = "Desconectado do servidor";
+    statusDiv.textContent = "Desconectado do servidor. Tentando reconectar...";
+    startButton.disabled = true;
   });
 
   socket.on("processed_frame", (data) => {
-    // Carregar a imagem processada no canvas
     const img = new Image();
     img.onload = () => {
-      // Limpar o canvas antes de desenhar
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-      // Marcar que recebemos a resposta
       isWaitingResponse = false;
-
-      // Se ainda estiver processando, solicitar próximo frame
       if (isProcessing) {
         requestAnimationFrame(processFrame);
       }
@@ -46,11 +54,9 @@ document.addEventListener("DOMContentLoaded", () => {
     isWaitingResponse = false;
   });
 
-  // Função para processar o frame atual
   function processFrame() {
     if (!isProcessing || isWaitingResponse) return;
 
-    // Configurar dimensões do canvas se necessário
     if (
       canvas.width !== video.videoWidth ||
       canvas.height !== video.videoHeight
@@ -60,34 +66,66 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     try {
-      // Criar um canvas temporário para o frame original
       const tempCanvas = document.createElement("canvas");
       tempCanvas.width = video.videoWidth;
       tempCanvas.height = video.videoHeight;
       const tempCtx = tempCanvas.getContext("2d");
       tempCtx.drawImage(video, 0, 0);
 
-      // Converter o canvas temporário para base64 e enviar para o servidor
       const imageData = tempCanvas.toDataURL("image/jpeg", 0.8);
       socket.emit("process_frame", imageData);
-
-      // Marcar que estamos esperando resposta
       isWaitingResponse = true;
     } catch (err) {
       console.error("Erro ao processar frame:", err);
+      statusDiv.textContent = `Erro ao processar frame: ${err.message}`;
       isWaitingResponse = false;
+    }
+  }
+
+  // Função para tentar diferentes configurações de câmera
+  async function tryGetUserMedia(constraints) {
+    try {
+      return await navigator.mediaDevices.getUserMedia(constraints);
+    } catch (err) {
+      console.log("Erro com configuração:", constraints, err);
+      throw err;
     }
   }
 
   // Iniciar a câmera
   startButton.addEventListener("click", async () => {
     try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: 640 },
-          height: { ideal: 480 },
-        },
-      });
+      if (location.protocol !== "https:" && location.hostname !== "localhost") {
+        throw new Error("Para acessar a câmera, use HTTPS ou localhost");
+      }
+
+      statusDiv.textContent = "Solicitando permissão para acessar a câmera...";
+
+      // Tentar diferentes configurações de câmera
+      let mediaStream;
+      try {
+        // Primeira tentativa: câmera traseira em dispositivos móveis
+        mediaStream = await tryGetUserMedia({
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+          },
+        });
+      } catch (err1) {
+        try {
+          // Segunda tentativa: qualquer câmera disponível
+          mediaStream = await tryGetUserMedia({
+            video: true,
+          });
+        } catch (err2) {
+          throw new Error(
+            "Não foi possível acessar a câmera. Por favor, verifique as permissões do navegador e tente novamente."
+          );
+        }
+      }
+
+      stream = mediaStream;
       video.srcObject = stream;
       await video.play();
 
@@ -100,11 +138,26 @@ document.addEventListener("DOMContentLoaded", () => {
       processFrame();
     } catch (err) {
       console.error("Erro ao acessar a câmera:", err);
-      statusDiv.textContent = `Erro ao acessar a câmera: ${err.message}`;
+      let mensagemErro = "Erro ao acessar a câmera. ";
+
+      if (
+        err.name === "NotAllowedError" ||
+        err.name === "PermissionDeniedError"
+      ) {
+        mensagemErro +=
+          "Você precisa permitir o acesso à câmera nas configurações do seu navegador. Em dispositivos móveis, tente: Configurações > Site > Câmera > Permitir";
+      } else if (err.name === "NotFoundError") {
+        mensagemErro += "Nenhuma câmera encontrada no dispositivo.";
+      } else if (err.name === "NotReadableError") {
+        mensagemErro += "A câmera pode estar sendo usada por outro aplicativo.";
+      } else {
+        mensagemErro += err.message;
+      }
+
+      statusDiv.textContent = mensagemErro;
     }
   });
 
-  // Parar a câmera
   stopButton.addEventListener("click", () => {
     isProcessing = false;
     isWaitingResponse = false;
@@ -115,8 +168,6 @@ document.addEventListener("DOMContentLoaded", () => {
     startButton.disabled = false;
     stopButton.disabled = true;
     statusDiv.textContent = "Câmera parada";
-
-    // Limpar o canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
   });
 });
