@@ -11,6 +11,8 @@ import base64
 import logging
 import time
 from typing import Optional
+import torch
+from torch.serialization import safe_globals
 
 # Configuração de logging mais detalhada
 logging.basicConfig(
@@ -18,6 +20,14 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# Configurar globals seguros para o PyTorch
+try:
+    from ultralytics.nn.tasks import DetectionModel
+    torch.serialization.add_safe_globals([DetectionModel])
+    logger.info("Configuração de segurança do PyTorch realizada com sucesso")
+except Exception as e:
+    logger.warning(f"Aviso ao configurar segurança do PyTorch: {e}")
 
 # Inicialização do FastAPI e SocketIO
 app = FastAPI()
@@ -41,11 +51,18 @@ model: Optional[YOLO] = None
 
 # Carregando o modelo YOLO
 try:
+    # Tentar carregar com a nova configuração de segurança
     model = YOLO('weights/best.pt')
     logger.info("Modelo YOLO carregado com sucesso!")
-except Exception as e:
-    logger.error(f"Erro ao carregar o modelo YOLO: {e}")
-    model = None
+except Exception as first_error:
+    logger.error(f"Primeira tentativa de carregar modelo falhou: {first_error}")
+    try:
+        # Tentar carregar com weights_only=False
+        model = YOLO('weights/best.pt', weights_only=False)
+        logger.info("Modelo YOLO carregado com sucesso (usando weights_only=False)!")
+    except Exception as second_error:
+        logger.error(f"Erro ao carregar o modelo YOLO: {second_error}")
+        model = None
 
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
