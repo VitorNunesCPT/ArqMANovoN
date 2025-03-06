@@ -9,6 +9,8 @@ document.addEventListener("DOMContentLoaded", () => {
   let stream = null;
   let isProcessing = false;
   let isWaitingResponse = false;
+  let frameCount = 0;
+  let lastFrameTime = Date.now();
 
   // Verificar suporte à câmera
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -23,24 +25,38 @@ document.addEventListener("DOMContentLoaded", () => {
     reconnection: true,
     reconnectionAttempts: 5,
     reconnectionDelay: 1000,
+    transports: ["websocket", "polling"],
   });
 
   socket.on("connect", () => {
+    console.log("Socket conectado:", socket.id);
     statusDiv.textContent = "Conectado ao servidor";
     startButton.disabled = false;
   });
 
   socket.on("disconnect", () => {
+    console.log("Socket desconectado");
     statusDiv.textContent = "Desconectado do servidor. Tentando reconectar...";
     startButton.disabled = true;
   });
 
   socket.on("processed_frame", (data) => {
+    console.log("Frame processado recebido");
     const img = new Image();
     img.onload = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       isWaitingResponse = false;
+
+      // Calcular FPS
+      frameCount++;
+      const now = Date.now();
+      if (now - lastFrameTime >= 1000) {
+        console.log(`FPS: ${frameCount}`);
+        frameCount = 0;
+        lastFrameTime = now;
+      }
+
       if (isProcessing) {
         requestAnimationFrame(processFrame);
       }
@@ -49,7 +65,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   socket.on("error", (error) => {
-    console.error("Erro:", error);
+    console.error("Erro no socket:", error);
     statusDiv.textContent = `Erro: ${error}`;
     isWaitingResponse = false;
   });
@@ -57,23 +73,41 @@ document.addEventListener("DOMContentLoaded", () => {
   function processFrame() {
     if (!isProcessing || isWaitingResponse) return;
 
-    if (
-      canvas.width !== video.videoWidth ||
-      canvas.height !== video.videoHeight
-    ) {
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-    }
-
     try {
-      const tempCanvas = document.createElement("canvas");
-      tempCanvas.width = video.videoWidth;
-      tempCanvas.height = video.videoHeight;
-      const tempCtx = tempCanvas.getContext("2d");
-      tempCtx.drawImage(video, 0, 0);
+      // Redimensionar o canvas para um tamanho menor
+      const targetWidth = 640;
+      const targetHeight = 480;
 
-      const imageData = tempCanvas.toDataURL("image/jpeg", 0.8);
-      socket.emit("process_frame", imageData);
+      if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+      }
+
+      const tempCanvas = document.createElement("canvas");
+      tempCanvas.width = targetWidth;
+      tempCanvas.height = targetHeight;
+      const tempCtx = tempCanvas.getContext("2d");
+
+      // Desenhar o vídeo redimensionado
+      tempCtx.drawImage(video, 0, 0, targetWidth, targetHeight);
+
+      // Comprimir mais a imagem
+      const imageData = tempCanvas.toDataURL("image/jpeg", 0.6);
+      console.log(
+        "Enviando frame, tamanho:",
+        Math.round(imageData.length / 1024),
+        "KB"
+      );
+
+      socket.emit("process_frame", imageData, (error) => {
+        if (error) {
+          console.error("Erro ao enviar frame:", error);
+          statusDiv.textContent = `Erro ao enviar frame: ${error}`;
+        } else {
+          console.log("Frame enviado com sucesso");
+        }
+      });
+
       isWaitingResponse = true;
     } catch (err) {
       console.error("Erro ao processar frame:", err);
@@ -85,9 +119,12 @@ document.addEventListener("DOMContentLoaded", () => {
   // Função para tentar diferentes configurações de câmera
   async function tryGetUserMedia(constraints) {
     try {
-      return await navigator.mediaDevices.getUserMedia(constraints);
+      console.log("Tentando obter mídia com constraints:", constraints);
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      console.log("Mídia obtida com sucesso");
+      return stream;
     } catch (err) {
-      console.log("Erro com configuração:", constraints, err);
+      console.log("Erro ao obter mídia:", err);
       throw err;
     }
   }
@@ -101,33 +138,45 @@ document.addEventListener("DOMContentLoaded", () => {
 
       statusDiv.textContent = "Solicitando permissão para acessar a câmera...";
 
-      // Tentar diferentes configurações de câmera
       let mediaStream;
       try {
-        // Primeira tentativa: câmera traseira em dispositivos móveis
+        // Primeira tentativa: câmera traseira com resolução menor
         mediaStream = await tryGetUserMedia({
           video: {
             facingMode: { ideal: "environment" },
             width: { ideal: 640 },
             height: { ideal: 480 },
+            frameRate: { ideal: 15 },
           },
         });
       } catch (err1) {
+        console.log(
+          "Primeira tentativa falhou, tentando configuração mais simples"
+        );
         try {
-          // Segunda tentativa: qualquer câmera disponível
           mediaStream = await tryGetUserMedia({
-            video: true,
+            video: {
+              width: { ideal: 640 },
+              height: { ideal: 480 },
+              frameRate: { ideal: 15 },
+            },
           });
         } catch (err2) {
-          throw new Error(
-            "Não foi possível acessar a câmera. Por favor, verifique as permissões do navegador e tente novamente."
-          );
+          console.log("Segunda tentativa falhou, tentando configuração básica");
+          mediaStream = await tryGetUserMedia({ video: true });
         }
       }
 
       stream = mediaStream;
       video.srcObject = stream;
       await video.play();
+
+      console.log(
+        "Câmera iniciada com resolução:",
+        video.videoWidth,
+        "x",
+        video.videoHeight
+      );
 
       isProcessing = true;
       isWaitingResponse = false;
