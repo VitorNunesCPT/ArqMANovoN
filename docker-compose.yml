@@ -13,8 +13,8 @@ services:
     environment:
       - TZ=America/Sao_Paulo
     networks:
-      - npm_network
+      - app_network
 
 networks:
-  npm_network:
-    external: true
+  app_network:
+    driver: bridge
