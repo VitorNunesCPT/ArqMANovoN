@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Detecção YOLO em Tempo Real</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <div class="container">
+      <h1>Detecção de Objetos em Tempo Real</h1>
+      <div class="video-container">
+        <video id="videoInput" style="display: none"></video>
+        <canvas id="canvasOutput"></canvas>
+      </div>
+      <div class="controls">
+        <button id="startButton">Iniciar Câmera</button>
+        <button id="stopButton" disabled>Parar</button>
+      </div>
+      <div id="status" class="status">Aguardando início...</div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="/static/app.js"></script>
+  </body>
+</html>

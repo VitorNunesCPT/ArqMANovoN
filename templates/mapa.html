@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Arquitetura Maranhense - Mapa do Centro Histórico</title>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    />
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/style.css') }}"
+    />
+    <style>
+      #map {
+        height: 600px;
+        width: 100%;
+        border-radius: 5px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <header class="text-center my-4">
+        <h1>Arquitetura Maranhense</h1>
+        <h2>Mapa do Centro Histórico de São Luís</h2>
+      </header>
+
+      <div class="row">
+        <div class="col-12">
+          <div class="card mb-4">
+            <div class="card-header">
+              <div class="d-flex justify-content-between align-items-center">
+                <h3>Visualização do Mapa</h3>
+                <a href="/" class="btn btn-primary">Voltar para Detecção</a>
+              </div>
+            </div>
+            <div class="card-body">
+              <div id="map"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="col-md-6">
+          <div class="card mb-4">
+            <div class="card-header">
+              <h3>Elementos Arquitetônicos</h3>
+            </div>
+            <div class="card-body">
+              <div class="list-group">
+                <button
+                  type="button"
+                  class="list-group-item list-group-item-action"
+                  data-filter="poste colonial"
+                >
+                  Postes Coloniais
+                </button>
+                <button
+                  type="button"
+                  class="list-group-item list-group-item-action"
+                  data-filter="grade ornamental colonial"
+                >
+                  Grades Ornamentais
+                </button>
+                <button
+                  type="button"
+                  class="list-group-item list-group-item-action"
+                  data-filter="rua de pedra colonial"
+                >
+                  Ruas de Pedra
+                </button>
+                <button
+                  type="button"
+                  class="list-group-item list-group-item-action"
+                  data-filter="porta arquitetura colonial"
+                >
+                  Portas Coloniais
+                </button>
+                <button
+                  type="button"
+                  class="list-group-item list-group-item-action"
+                  data-filter="igreja da se"
+                >
+                  Igreja da Sé
+                </button>
+                <button
+                  type="button"
+                  class="list-group-item list-group-item-action"
+                  data-filter="janela colonial"
+                >
+                  Janelas Coloniais
+                </button>
+                <button
+                  type="button"
+                  class="list-group-item list-group-item-action active"
+                  data-filter="todos"
+                >
+                  Mostrar Todos
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-md-6">
+          <div class="card mb-4">
+            <div class="card-header">
+              <h3>Estatísticas</h3>
+            </div>
+            <div class="card-body">
+              <div id="estatisticas">
+                <p>Carregando estatísticas...</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="{{ url_for('static', filename='js/mapa.js') }}"></script>
+  </body>
+</html>

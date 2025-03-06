@@ -1,0 +1,6 @@
+0 : poste colonial
+1 : grade ornamental colonial
+2 : rua de pedra colonial
+3 : porta arquitetura colonial
+4 : igreja da se
+5 : janela colonial
