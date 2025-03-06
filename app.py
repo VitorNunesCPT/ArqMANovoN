@@ -26,7 +26,7 @@ templates = Jinja2Templates(directory="templates")
 # Carregando o modelo YOLO
 try:
     model = YOLO('weights/best.pt')
-    logger.info("Modelo YOLO personalizado carregado com sucesso!")
+    logger.info("Modelo YOLO carregado com sucesso!")
 except Exception as e:
     logger.error(f"Erro ao carregar o modelo YOLO: {e}")
     model = None

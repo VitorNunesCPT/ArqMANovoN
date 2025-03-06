@@ -8,6 +8,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let stream = null;
   let isProcessing = false;
+  let isWaitingResponse = false;
 
   // Conectar ao servidor Socket.IO
   const socket = io();
@@ -24,9 +25,14 @@ document.addEventListener("DOMContentLoaded", () => {
     // Carregar a imagem processada no canvas
     const img = new Image();
     img.onload = () => {
-      canvas.width = img.width;
-      canvas.height = img.height;
-      ctx.drawImage(img, 0, 0);
+      // Limpar o canvas antes de desenhar
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+      // Marcar que recebemos a resposta
+      isWaitingResponse = false;
+
+      // Se ainda estiver processando, solicitar próximo frame
       if (isProcessing) {
         requestAnimationFrame(processFrame);
       }
@@ -37,20 +43,40 @@ document.addEventListener("DOMContentLoaded", () => {
   socket.on("error", (error) => {
     console.error("Erro:", error);
     statusDiv.textContent = `Erro: ${error}`;
+    isWaitingResponse = false;
   });
 
   // Função para processar o frame atual
   function processFrame() {
-    if (!isProcessing) return;
+    if (!isProcessing || isWaitingResponse) return;
 
-    // Desenhar o frame atual no canvas
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    ctx.drawImage(video, 0, 0);
+    // Configurar dimensões do canvas se necessário
+    if (
+      canvas.width !== video.videoWidth ||
+      canvas.height !== video.videoHeight
+    ) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+    }
 
-    // Converter o canvas para base64 e enviar para o servidor
-    const imageData = canvas.toDataURL("image/jpeg", 0.8);
-    socket.emit("process_frame", imageData);
+    try {
+      // Criar um canvas temporário para o frame original
+      const tempCanvas = document.createElement("canvas");
+      tempCanvas.width = video.videoWidth;
+      tempCanvas.height = video.videoHeight;
+      const tempCtx = tempCanvas.getContext("2d");
+      tempCtx.drawImage(video, 0, 0);
+
+      // Converter o canvas temporário para base64 e enviar para o servidor
+      const imageData = tempCanvas.toDataURL("image/jpeg", 0.8);
+      socket.emit("process_frame", imageData);
+
+      // Marcar que estamos esperando resposta
+      isWaitingResponse = true;
+    } catch (err) {
+      console.error("Erro ao processar frame:", err);
+      isWaitingResponse = false;
+    }
   }
 
   // Iniciar a câmera
@@ -66,6 +92,7 @@ document.addEventListener("DOMContentLoaded", () => {
       await video.play();
 
       isProcessing = true;
+      isWaitingResponse = false;
       startButton.disabled = true;
       stopButton.disabled = false;
       statusDiv.textContent = "Câmera iniciada";
@@ -80,6 +107,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Parar a câmera
   stopButton.addEventListener("click", () => {
     isProcessing = false;
+    isWaitingResponse = false;
     if (stream) {
       stream.getTracks().forEach((track) => track.stop());
       video.srcObject = null;
